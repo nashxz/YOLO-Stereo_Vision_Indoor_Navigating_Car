@@ -1,1 +1,36 @@
 # Active-Stereo-Vision-Deep-Learning-Fusion-for-Real-Time-Indoor-Navigation
+
+## Project Overview
+
+**ECE 490/491 - Group 26 | University of Alberta**
+
+This project implements a real-time indoor obstacle detection and 3D localization system for a small motorized vehicle. It is specifically optimized for challenging **low-light** and **poorly textured** environments (e.g., featureless white walls) where traditional vision algorithms typically fail.
+
+## System Architecture: The "Brain-Stem" Model
+
+The software follows a bifurcated architecture to ensure both high-level intelligence and low-level safety:
+
+- **The Brain (NVIDIA Jetson Nano):** Handles high-level perception, including YOLOv8 object detection, synchronized RGB-D data processing, and complex decision-making logic.
+
+- **The Stem (ESP32):** Manages real-time motor control, executes timing-critical reflexes, and handles hardware failsafes through ultrasonic sensors.
+
+## Key Technical Features
+
+### Multiprocessing Pipeline
+Three parallel processes (Camera I/O, Perception Engine, and UART Communication) minimize latency and prevent camera fetch rates from being bottlenecked.
+
+### Hysteresis-Based Fusion
+Logic switches between "Semantic Mode" (YOLOv8) and "Geometric Mode" (Stereo Depth) based on ambient light levels to prevent "mode flickering".
+
+### Active Stereo Sensing
+Leverages the Intel RealSense D435's internal IR projector to create artificial texture on featureless surfaces, achieving a depth map fill rate of >99% on white walls.
+
+### Safety Redundancy
+Hardware-level ultrasonic interrupts (front and side) override the Jetson Nano and stop the vehicle if an obstacle is detected within 0.25m.
+
+## Performance & Safety Requirements
+
+- **Perception Inference:** ≤40 ms (~15 FPS) utilizing TensorRT optimization
+- **Reaction Latency:** End-to-end reaction time under 200ms
+- **Heartbeat Fail-safe:** Automatic motor shutdown if communication from the Jetson is lost for more than 500ms
+- **Watchdog Timer:** 1-second hardware watchdog to reset the ESP32 in case of firmware hangs
