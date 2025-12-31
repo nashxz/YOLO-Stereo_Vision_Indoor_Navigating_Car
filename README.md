@@ -14,6 +14,31 @@ The software follows a bifurcated architecture to ensure both high-level intelli
 
 - **The Stem (ESP32):** Manages real-time motor control, executes timing-critical reflexes, and handles hardware failsafes through ultrasonic sensors.
 
+## Hardware Design
+
+### Chassis
+
+The vehicle chassis is designed to provide a stable platform for the stereo vision system and computing hardware. The chassis accommodates the Intel RealSense D435 camera at an optimal height for indoor navigation, ensuring clear line-of-sight for obstacle detection.
+
+![Chassis View 1](hardware/chassis/chassis1.jpeg)
+*Front view of the vehicle chassis showing camera mounting and overall structure*
+
+![Chassis View 2](hardware/chassis/chassis2.jpeg)
+*Side view of the chassis highlighting the compact design and component placement*
+
+### PCB Design
+
+The custom PCB integrates the ESP32 microcontroller with motor drivers, ultrasonic sensor interfaces, and communication modules. The board is designed to handle real-time motor control while maintaining reliable communication with the Jetson Nano via UART.
+
+![PCB Design 1](hardware/pcb/pcb_design1.png)
+*Top view of the PCB layout showing component placement and routing*
+
+![PCB Design 2](hardware/pcb/pcb_design2.png)
+*Bottom view of the PCB showing ground planes and power distribution*
+
+![PCB Schematic](hardware/pcb/Schematic.jpg)
+*Complete schematic diagram of the PCB showing all electrical connections, including ESP32, motor drivers, ultrasonic sensor interfaces, and communication modules*
+
 ## Key Technical Features
 
 ### Multiprocessing Pipeline
