@@ -3,123 +3,101 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 
+# COPY AND RUN THIS ON POWERSHELL (LAPTOP) TO START THE GSTREAMER RTSP SERVER:
+# cmd.exe /c '"C:\Program Files\gstreamer\1.0\msvc_x86_64\bin\gst-launch-1.0.exe" -v udpsrc port=5000 ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=96 ! rtph264depay ! decodebin ! videoconvert ! autovideosink sync=false'
+
+try:
+    cv2.destroyAllWindows()
+except:
+    pass
+
 # --- CONFIGURATION ---
-# Camera Resolution (Lower = Faster processing on Jetson)
-WIDTH, HEIGHT = 640, 480
+W, H = 424, 240  # Unified resolution for speed
 FPS = 30
+STOP_DISTANCE = 0.6  # 60cm
 
-# The "Reflex" Safety Zone (The area in front of the robot to scan)
-# We ignore the edges and focus on the center where collisions happen.
-# Values are in pixels.
-ROI_X_MIN, ROI_X_MAX = 200, 440  # Middle 240 pixels width
-ROI_Y_MIN, ROI_Y_MAX = 100, 380  # Middle 280 pixels height
-
-# Distance Thresholds (Meters)
-STOP_DISTANCE = 0.6  # If anything is closer than 60cm, STOP.
-
-# --- 1. SETUP HARDWARE ---
+# Setup RealSense Pipeline
 pipeline = rs.pipeline()
 config = rs.config()
-config.enable_stream(rs.stream.depth, WIDTH, HEIGHT, rs.format.z16, FPS)
-config.enable_stream(rs.stream.color, WIDTH, HEIGHT, rs.format.bgr8, FPS)
-
-# Start Streaming
+config.enable_stream(rs.stream.depth, W, H, rs.format.z16, FPS)
+config.enable_stream(rs.stream.color, W, H, rs.format.bgr8, FPS)
 profile = pipeline.start(config)
 
-# [CRITICAL] Enable IR Emitter for Textureless Walls
-# This ensures we get depth data even on white walls.
-depth_sensor = profile.get_device().first_depth_sensor()
-if depth_sensor.supports(rs.option.emitter_enabled):
-    depth_sensor.set_option(rs.option.emitter_enabled, 1.0) # 1 = ON
+# --- NEW: Setup Depth-to-Color Alignment ---
+align_to = rs.stream.color
+align = rs.align(align_to)
+# 
 
-# Align Object (Matches Depth to Color pixels)
-align = rs.align(rs.stream.color)
 
-# --- 2. SETUP AI ---
-print("Loading YOLO Model...")
-model = YOLO('yolov8n.pt') # Uses the lightest model
+gst_out = (
+    "appsrc ! videoconvert ! video/x-raw, format=I420 ! "
+    "x264enc tune=zerolatency speed-preset=ultrafast threads=4 bitrate=1500 key-int-max=30 ! "
+    "rtph264pay config-interval=1 pt=96 ! "
+    "udpsink host=192.168.1.227 port=5000 sync=false"
+)
+
+out = cv2.VideoWriter(gst_out, cv2.CAP_GSTREAMER, 0, FPS, (W, H), True)
+
+# --- FIX 1: The GStreamer Safety Check ---
+if not out.isOpened():
+    print("WARNING: GStreamer pipeline failed to open. Is your RTSP server running on localhost:8554?")
+
+# --- FIX 2: Load the compiled TensorRT Engine ---
+model = YOLO('/home/group26/Active-Stereo-Vision-Deep-Learning-Fusion-for-Real-Time-Indoor-Navigation/src/brain/yolov8n.engine', task='detect')
+
+# --- FIX 3: State flag for the warm-up print ---
+first_inference = True 
 
 try:
     while True:
-        # Get Frames
         frames = pipeline.wait_for_frames()
+        
         aligned_frames = align.process(frames)
         depth_frame = aligned_frames.get_depth_frame()
         color_frame = aligned_frames.get_color_frame()
-
+        
         if not depth_frame or not color_frame: continue
 
-        # Convert to Numpy Arrays
-        depth_image = np.asanyarray(depth_frame.get_data())
-        color_image = np.asanyarray(color_frame.get_data())
+        frame = np.asanyarray(color_frame.get_data())
 
-        # Run YOLO Inference
-        results = model(color_image, verbose=False)
-        detections = results[0].boxes
-
-        # --- HYBRID LOGIC START ---
-
-        if len(detections) > 0:
-            # === SCENARIO A: YOLO SEES SOMETHING ===
-            # The robot is "smart." It knows what the object is.
-            mode_text = "MODE: AI (YOLO)"
-            status_color = (0, 255, 0) # Green
-
-            for box in detections:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                label = model.names[int(box.cls[0])]
-                
-                # Simple box drawing
-                cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(color_image, label, (x1, y1-10), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        else:
-            # === SCENARIO B: YOLO SEES NOTHING (REFLEX LAYER) ===
-            # The robot is "blind" to objects, but "aware" of physics.
-            # We explicitly check the depth map for ANY obstacle.
+        # 1. AI Layer (YOLO)
+        if first_inference:
+            print("-> Running first AI Inference (Allocating GPU memory, please wait)...")
             
-            mode_text = "MODE: REFLEX (DEPTH ONLY)"
-            
-            # 1. Cut out the Safety Zone from the depth image
-            safety_zone_depth = depth_image[ROI_Y_MIN:ROI_Y_MAX, ROI_X_MIN:ROI_X_MAX]
-            
-            # 2. Filter out 0s (Noise) to avoid false positives
-            valid_pixels = safety_zone_depth[safety_zone_depth > 0]
+        results = model(frame, verbose=False)
+        
+        if first_inference:
+            print("-> Inference complete! Sprinting at full FPS...")
+            first_inference = False
+        
+        # Draw YOLO boxes FIRST
+        frame = results[0].plot() 
+        
+        # 2. Reflex Layer (Depth check in center of screen)
+        depth_data = np.asanyarray(depth_frame.get_data())
+        depth_scale = profile.get_device().first_depth_sensor().get_depth_scale()
+        
+        center_y, center_x = H//2, W//2
+        patch = depth_data[center_y-2:center_y+3, center_x-2:center_x+3] * depth_scale
+        
+        # Filter out 0.0 values (invalid data) and find the average distance
+        valid_depths = patch[patch > 0]
+        center_depth = np.mean(valid_depths) if len(valid_depths) > 0 else 0.0
 
-            if valid_pixels.size > 0:
-                # 3. Find the CLOSEST point in that zone
-                # We use percentile (e.g., 1%) instead of min() to ignore random noise specs
-                closest_dist_mm = np.percentile(valid_pixels, 1)
-                closest_dist_m = closest_dist_mm / 1000.0
+        # Logic
+        if 0 < center_depth < STOP_DISTANCE:
+            cv2.putText(frame, "BRAKE: OBSTACLE DETECTED", (10, 60), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 3)
 
-                # 4. Safety Logic
-                if closest_dist_m < STOP_DISTANCE:
-                    status_text = f"OBSTACLE: {closest_dist_m:.2f}m - STOP!"
-                    status_color = (0, 0, 255) # Red
-                    # TODO: Send 'STOP' to Arduino/ESP32 here
-                else:
-                    status_text = f"Path Clear ({closest_dist_m:.2f}m)"
-                    status_color = (255, 255, 0) # Cyan
-            else:
-                # If all pixels are 0, we are either blind or looking at infinity
-                status_text = "No Depth Data"
-                status_color = (128, 128, 128)
+        # Visuals (Drawn on top of everything)
+        cv2.rectangle(frame, (center_x-2, center_y-2), (center_x+2, center_y+2), (255, 0, 0), 1)
+        cv2.putText(frame, f"Center Dist: {center_depth:.2f}m", (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
-            # Visualize the Safety Zone Box so you can see where it's looking
-            cv2.rectangle(color_image, (ROI_X_MIN, ROI_Y_MIN), 
-                          (ROI_X_MAX, ROI_Y_MAX), status_color, 2)
-            cv2.putText(color_image, status_text, (ROI_X_MIN, ROI_Y_MIN - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
-
-        # Draw Mode Label
-        cv2.putText(color_image, mode_text, (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-
-        # Display
-        cv2.imshow('Capstone Hybrid Logic', color_image)
-        if cv2.waitKey(1) == ord('q'): break
+        if out.isOpened():
+            out.write(frame)
 
 finally:
     pipeline.stop()
-    cv2.destroyAllWindows()
+    if out.isOpened():
+        out.release()
