@@ -1,4 +1,4 @@
-# Active-Stereo-Vision-Deep-Learning-Fusion-for-Real-Time-Indoor-Navigation
+# YOLO/Stereo Vision Indoor Navigating Car
 
 ## Project Overview
 
