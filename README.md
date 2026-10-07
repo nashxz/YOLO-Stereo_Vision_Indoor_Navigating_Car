@@ -30,18 +30,7 @@ The software follows a bifurcated architecture to ensure both high-level intelli
 
 ## Hardware Design
 
-### Chassis
-
-The vehicle chassis is designed to provide a stable platform for the stereo vision system and computing hardware. The chassis accommodates the Intel RealSense D435 camera at an optimal height for indoor navigation, ensuring clear line-of-sight for obstacle detection.
-
-![Chassis View 1](hardware/chassis/chassis1.jpeg)
-*Front view of the vehicle chassis showing camera mounting and overall structure*
-
-![Chassis View 2](hardware/chassis/chassis2.jpeg)
-*Side view of the chassis highlighting the compact design and component placement*
-
 ### PCB Design
-
 The custom PCB integrates the ESP32 microcontroller with motor drivers, ultrasonic sensor interfaces, and communication modules. The board is designed to handle real-time motor control while maintaining reliable communication with the Jetson Nano via UART.
 
 ![PCB Design 1](hardware/pcb/pcb_final.png)
@@ -52,6 +41,15 @@ The custom PCB integrates the ESP32 microcontroller with motor drivers, ultrason
 
 ![PCB Schematic](hardware/pcb/Schematic.jpg)
 *Complete schematic diagram of the PCB showing all electrical connections, including ESP32, motor drivers, ultrasonic sensor interfaces, and communication modules*
+
+### Chassis
+The vehicle chassis is designed to provide a stable platform for the stereo vision system and computing hardware. The chassis accommodates the Intel RealSense D435 camera at an optimal height for indoor navigation, ensuring clear line-of-sight for obstacle detection.
+
+![Chassis View 1](hardware/chassis/chassis1.jpeg)
+*Front view of the vehicle chassis showing camera mounting and overall structure*
+
+![Chassis View 2](hardware/chassis/chassis2.jpeg)
+*Side view of the chassis highlighting the compact design and component placement*
 
 ## Key Technical Features
 
