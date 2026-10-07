@@ -45,10 +45,10 @@ The vehicle chassis is designed to provide a stable platform for the stereo visi
 The custom PCB integrates the ESP32 microcontroller with motor drivers, ultrasonic sensor interfaces, and communication modules. The board is designed to handle real-time motor control while maintaining reliable communication with the Jetson Nano via UART.
 
 ![PCB Design 1](hardware/pcb/pcb_final.png)
-*Top view of the PCB layout showing component placement and routing*
+*Final View after full implementation and testing*
 
 ![PCB Design 2](hardware/pcb/pcb_design2.png)
-*Bottom view of the PCB showing ground planes and power distribution*
+*View of the PCB showing ground planes and power distribution*
 
 ![PCB Schematic](hardware/pcb/Schematic.jpg)
 *Complete schematic diagram of the PCB showing all electrical connections, including ESP32, motor drivers, ultrasonic sensor interfaces, and communication modules*
